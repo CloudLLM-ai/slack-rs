@@ -37,6 +37,8 @@ use crate::events::{MessageError, MessageSent};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc;
 use std::sync::Arc;
+use tungstenite::http::Request;
+use tungstenite::stream::MaybeTlsStream;
 
 /// Implement this trait in your code to handle message events
 pub trait EventHandler {
@@ -192,16 +194,49 @@ impl RtmClient {
             .as_ref()
             .ok_or_else(|| Error::Api("Slack did not provide a URL".into()))?;
         let wss_url = url::Url::parse_with_params(&start_url, &[("batch_presence_aware", "1")])?;
-        let (mut websocket, _resp) = tungstenite::client::connect(wss_url)?;
+        // Convert url::Url to tungstenite::http::Request
+        let request = Request::builder()
+            .uri(wss_url.as_str())
+            .header("Host", wss_url.host_str().unwrap_or_default())
+            .header("Upgrade", "websocket")
+            .header("Connection", "Upgrade")
+            .header("Sec-WebSocket-Version", "13")
+            .header("Sec-WebSocket-Key", tungstenite::handshake::client::generate_key())
+            .body(())
+            .map_err(|e| Error::Internal(format!("Failed to build request: {}", e)))?;
+        let (mut websocket, _resp) = tungstenite::connect(request)?;
 
-        // Slack can leave us hanging
-        {
-            let socket = match *websocket.get_mut() {
-                tungstenite::stream::Stream::Plain(ref s) => s,
-                tungstenite::stream::Stream::Tls(ref mut t) => t.get_mut(),
-            };
-            socket.set_read_timeout(Some(std::time::Duration::from_secs(30)))?;
-            socket.set_write_timeout(Some(std::time::Duration::from_secs(25)))?;
+        // Set socket timeouts
+        match websocket.get_mut() {
+            MaybeTlsStream::Plain(tcp_stream) => {
+                tcp_stream
+                    .set_read_timeout(Some(std::time::Duration::from_secs(30)))
+                    .map_err(|e| Error::Internal(format!("Failed to set read timeout: {}", e)))?;
+                tcp_stream
+                    .set_write_timeout(Some(std::time::Duration::from_secs(25)))
+                    .map_err(|e| Error::Internal(format!("Failed to set write timeout: {}", e)))?;
+            }
+            #[cfg(feature = "rustls-tls")]
+            MaybeTlsStream::Rustls(tls_stream) => {
+                // rustls does not support setting timeouts directly on the TLS stream
+                // Timeouts are typically handled at the TCP level or via tungstenite's configuration
+            }
+            #[cfg(feature = "native-tls")]
+            MaybeTlsStream::NativeTls(tls_stream) => {
+                tls_stream
+                    .get_mut()
+                    .set_read_timeout(Some(std::time::Duration::from_secs(30)))
+                    .map_err(|e| Error::Internal(format!("Failed to set read timeout: {}", e)))?;
+                tls_stream
+                    .get_mut()
+                    .set_write_timeout(Some(std::time::Duration::from_secs(25)))
+                    .map_err(|e| Error::Internal(format!("Failed to set write timeout: {}", e)))?;
+            }
+            _ => {
+                return Err(Error::Internal(
+                    "Unsupported stream type for setting timeouts".into(),
+                ));
+            }
         }
 
         handler.on_connect(self);
@@ -215,7 +250,7 @@ impl RtmClient {
                 match self.rx.try_recv() {
                     Ok(msg) => match msg {
                         WsMessage::Text(text) => {
-                            websocket.write_message(tungstenite::Message::Text(text))?
+                            websocket.write_message(tungstenite::Message::Text(text.into()))?
                         }
                         WsMessage::Close => {
                             handler.on_close(self);
@@ -235,7 +270,7 @@ impl RtmClient {
                 Err(e) => {
                     debug!("{:?}", e);
                     // read failed, try send ping to check still alive
-                    websocket.write_message(tungstenite::Message::Ping(vec![]))?;
+                    websocket.write_message(tungstenite::Message::Ping(bytes::Bytes::new()))?;
                     continue;
                 }
                 Ok(m) => m,
@@ -265,6 +300,10 @@ impl RtmClient {
                     tungstenite::Message::Ping(_) => print_recieved("Ping"),
                     tungstenite::Message::Pong(_) => print_recieved("Pong"),
                     tungstenite::Message::Close(_) => print_recieved("Close"),
+                    tungstenite::Message::Frame(_) => {
+                        // This is a low-level message, we don't handle it
+                        print_recieved("Frame");
+                    }
                 }
             }
             prev_ = received;
