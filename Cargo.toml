@@ -9,19 +9,15 @@ license = "Apache-2.0"
 edition = "2018"
 readme = "README.md"
 
-[dependencies.slack_api]
-version = "0.23.1"
-default-features = false
-features = ["reqwest_blocking"]
-
 [dependencies]
 serde = "1.0.219"
 serde_json = "1.0.142"
 serde_derive = "1.0.219"
-tungstenite = { version = "0.27.0", default-features = false, features = ["handshake", "__rustls-tls", "native-tls"] }
+tungstenite = { version = "0.27.0", default-features = false, features = ["handshake", "rustls", "native-tls"] }
 log = "0.4.2"
 url = "2.5.4"
 bytes = "1.10.1"
+slack_api= { version = "0.23.1", default-features = false, features = ["reqwest_blocking"] }
 
 [features]
 #default = ["with_rustls"]
