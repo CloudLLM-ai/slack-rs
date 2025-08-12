@@ -1,12 +1,12 @@
 [package]
-name = "slack"
-version = "0.25.0"
-authors = ["Benjamin Elder <bentheelder@gmail.com>", "Matt Jones <mthjones@gmail.com>", "David Hewson <dev@daveid.co.uk>"]
-repository = "https://github.com/slack-rs/slack-rs.git"
-documentation = "https://docs.rs/slack"
+name = "slack2"
+version = "0.26.0"
+authors = ["Angel Leon <gubatron@gmail.com>", "Benjamin Elder <bentheelder@gmail.com>", "Matt Jones <mthjones@gmail.com>", "David Hewson <dev@daveid.co.uk>"]
+repository = "https://github.com/CloudLLM-ai/slack-rs.git"
+documentation = "https://docs.rs/slack2"
 description = "slack realtime messaging client: https://api.slack.com/bot-users"
 license = "Apache-2.0"
-edition = "2018"
+edition = "2021"
 readme = "README.md"
 
 [dependencies]
@@ -20,7 +20,6 @@ bytes = "1.10.1"
 slack_api= { version = "0.23.1", default-features = false, features = ["reqwest_blocking"] }
 
 [features]
-#default = ["with_rustls"]
 default = ["with_native_tls"]
 with_rustls = ["tungstenite/__rustls-tls", "slack_api/with_rustls"]
 with_native_tls = ["tungstenite/native-tls", "slack_api/with_native_tls"]
