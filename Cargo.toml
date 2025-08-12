@@ -18,12 +18,13 @@ features = ["reqwest_blocking"]
 serde = "1.0.219"
 serde_json = "1.0.142"
 serde_derive = "1.0.219"
-tungstenite = "0.27.0"
+tungstenite = { version = "0.27.0", default-features = false, features = ["handshake", "__rustls-tls", "native-tls"] }
 log = "0.4.2"
-url = "2.1.0"
+url = "2.5.4"
 bytes = "1.10.1"
 
 [features]
+#default = ["with_rustls"]
 default = ["with_native_tls"]
-with_rustls = ["slack_api/with_rustls"]
-with_native_tls = ["slack_api/with_native_tls"]
+with_rustls = ["tungstenite/__rustls-tls", "slack_api/with_rustls"]
+with_native_tls = ["tungstenite/native-tls", "slack_api/with_native_tls"]

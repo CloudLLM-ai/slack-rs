@@ -1,4 +1,3 @@
-//
 // Copyright 2014-2016 the slack-rs authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -143,7 +142,7 @@ impl Sender {
     /// This is due to the update in presence events detailed here:
     /// https://api.slack.com/changelog/2017-10-making-rtm-presence-subscription-only
     ///
-    /// `user_list` is a slice of the list of users to subscrib, e.g. `W839208`, not @xyz.
+    /// `user_list` is a slice of the list of users to subscribe, e.g. `W839208`, not @xyz.
     /// The full list of users to subscribe to must be sent each time the subscription should
     /// change
     /// Slack doc can be found at https://api.slack.com/docs/presence-and-status under "Determining
@@ -216,27 +215,27 @@ impl RtmClient {
                     .set_write_timeout(Some(std::time::Duration::from_secs(25)))
                     .map_err(|e| Error::Internal(format!("Failed to set write timeout: {}", e)))?;
             }
-            #[cfg(feature = "rustls-tls")]
-            MaybeTlsStream::Rustls(tls_stream) => {
+            #[cfg(feature = "with_rustls")]
+            MaybeTlsStream::Rustls(_tls_stream) => {
                 // rustls does not support setting timeouts directly on the TLS stream
                 // Timeouts are typically handled at the TCP level or via tungstenite's configuration
             }
-            #[cfg(feature = "native-tls")]
-            MaybeTlsStream::NativeTls(tls_stream) => {
-                tls_stream
-                    .get_mut()
-                    .set_read_timeout(Some(std::time::Duration::from_secs(30)))
-                    .map_err(|e| Error::Internal(format!("Failed to set read timeout: {}", e)))?;
-                tls_stream
-                    .get_mut()
-                    .set_write_timeout(Some(std::time::Duration::from_secs(25)))
-                    .map_err(|e| Error::Internal(format!("Failed to set write timeout: {}", e)))?;
-            }
+
             _ => {
-                return Err(Error::Internal(
-                    "Unsupported stream type for setting timeouts".into(),
-                ));
+
             }
+
+            // #[cfg(feature = "with_native_tls")]
+            // MaybeTlsStream::NativeTls(tls_stream) => {
+            //     tls_stream
+            //         .get_ref()
+            //         .set_read_timeout(Some(std::time::Duration::from_secs(30)))
+            //         .map_err(|e| Error::Internal(format!("Failed to set read timeout: {}", e)))?;
+            //     tls_stream
+            //         .get_ref()
+            //         .set_write_timeout(Some(std::time::Duration::from_secs(25)))
+            //         .map_err(|e| Error::Internal(format!("Failed to set write timeout: {}", e)))?;
+            // }
         }
 
         handler.on_connect(self);
@@ -250,7 +249,7 @@ impl RtmClient {
                 match self.rx.try_recv() {
                     Ok(msg) => match msg {
                         WsMessage::Text(text) => {
-                            websocket.write_message(tungstenite::Message::Text(text.into()))?
+                            websocket.send(tungstenite::Message::Text(text.into()))?;
                         }
                         WsMessage::Close => {
                             handler.on_close(self);
@@ -266,11 +265,11 @@ impl RtmClient {
             }
 
             // blocks until a message is received or websocket errors
-            let message = match websocket.read_message() {
+            let message = match websocket.read() {
                 Err(e) => {
                     debug!("{:?}", e);
                     // read failed, try send ping to check still alive
-                    websocket.write_message(tungstenite::Message::Ping(bytes::Bytes::new()))?;
+                    websocket.send(tungstenite::Message::Ping(bytes::Bytes::new()))?;
                     continue;
                 }
                 Ok(m) => m,
@@ -278,9 +277,9 @@ impl RtmClient {
 
             let received = ::std::time::Instant::now();
             {
-                let print_recieved = |var: &str| {
+                let print_received = |var: &str| {
                     debug!(
-                        "RTM WS {} recieved {:?} since last msg",
+                        "RTM WS {} received {:?} since last msg",
                         var,
                         received - prev_
                     );
@@ -296,14 +295,11 @@ impl RtmClient {
                             );
                         }
                     },
-                    tungstenite::Message::Binary(_) => print_recieved("Binary"),
-                    tungstenite::Message::Ping(_) => print_recieved("Ping"),
-                    tungstenite::Message::Pong(_) => print_recieved("Pong"),
-                    tungstenite::Message::Close(_) => print_recieved("Close"),
-                    tungstenite::Message::Frame(_) => {
-                        // This is a low-level message, we don't handle it
-                        print_recieved("Frame");
-                    }
+                    tungstenite::Message::Binary(_) => print_received("Binary"),
+                    tungstenite::Message::Ping(_) => print_received("Ping"),
+                    tungstenite::Message::Pong(_) => print_received("Pong"),
+                    tungstenite::Message::Close(_) => print_received("Close"),
+                    tungstenite::Message::Frame(_) => print_received("Frame"),
                 }
             }
             prev_ = received;
