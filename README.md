@@ -11,13 +11,13 @@
 Add this to your `Cargo.toml`:
 ```toml
 [dependencies]
-slack = "0.25.0"
+slack2 = "0.26.0"
 ```
 
 and this to your crate root:
 
 ```rust
-extern crate slack;
+extern crate slack2 as slack;
 ```
 
 # Example
