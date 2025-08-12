@@ -220,22 +220,20 @@ impl RtmClient {
                 // rustls does not support setting timeouts directly on the TLS stream
                 // Timeouts are typically handled at the TCP level or via tungstenite's configuration
             }
-
-            _ => {
-
+            #[cfg(feature = "with_native_tls")]
+            MaybeTlsStream::NativeTls(tls_stream) => {
+                tls_stream
+                    .get_ref()
+                    .set_read_timeout(Some(std::time::Duration::from_secs(30)))
+                    .map_err(|e| Error::Internal(format!("Failed to set read timeout: {}", e)))?;
+                tls_stream
+                    .get_ref()
+                    .set_write_timeout(Some(std::time::Duration::from_secs(25)))
+                    .map_err(|e| Error::Internal(format!("Failed to set write timeout: {}", e)))?;
             }
-
-            // #[cfg(feature = "with_native_tls")]
-            // MaybeTlsStream::NativeTls(tls_stream) => {
-            //     tls_stream
-            //         .get_ref()
-            //         .set_read_timeout(Some(std::time::Duration::from_secs(30)))
-            //         .map_err(|e| Error::Internal(format!("Failed to set read timeout: {}", e)))?;
-            //     tls_stream
-            //         .get_ref()
-            //         .set_write_timeout(Some(std::time::Duration::from_secs(25)))
-            //         .map_err(|e| Error::Internal(format!("Failed to set write timeout: {}", e)))?;
-            // }
+            &mut _ => {
+                return Err(Error::Internal("Unsupported TLS stream type".into()));
+            }
         }
 
         handler.on_connect(self);
